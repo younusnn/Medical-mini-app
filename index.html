@@ -11,7 +11,7 @@
   <!-- Supabase JS Client v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-900 text-white font-sans p-4 min-h-screen pb-12">
+<body class="bg-slate-900 text-white font-sans p-4 min-h-screen pb-12 select-none">
 
   <!-- الهيدر والترحيب -->
   <header class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
@@ -38,17 +38,33 @@
       <div class="grid grid-cols-2 gap-2">
         <select id="type" class="p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
           <option value="pdf">ملف PDF</option>
-          <option value="youtube">فيديو يوتيوب</option>
+          <option value="youtube">فيديو (رابط/يوتيوب)</option>
         </select>
         <input type="text" id="doctor_name" placeholder="اسم المحاضر" class="p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
       </div>
 
-      <input type="text" id="file_url" placeholder="رابط الملف/اليوتيوب أو رابط القناة" required class="w-full p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
+      <input type="text" id="file_url" placeholder="رابط الملف الـ PDF أو الفيديو المباشر" required class="w-full p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
       
       <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">
         🚀 نشر المحاضرة في التطبيق
       </button>
     </form>
+  </section>
+
+  <!-- أدوات البحث والتصفية -->
+  <section class="mb-6 space-y-3">
+    <input type="text" id="search-input" oninput="filterMaterials()" placeholder="🔍 ابحث عن محاضرة أو اسم دكتور..." class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+    
+    <!-- أزرار التصفية حسب المراحل -->
+    <div class="flex gap-2 overflow-x-auto pb-1 text-xs no-scrollbar">
+      <button onclick="setStageFilter('all')" class="stage-btn bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold shrink-0">الكل</button>
+      <button onclick="setStageFilter(1)" class="stage-btn bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold shrink-0">المرحلة 1</button>
+      <button onclick="setStageFilter(2)" class="stage-btn bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold shrink-0">المرحلة 2</button>
+      <button onclick="setStageFilter(3)" class="stage-btn bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold shrink-0">المرحلة 3</button>
+      <button onclick="setStageFilter(4)" class="stage-btn bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold shrink-0">المرحلة 4</button>
+      <button onclick="setStageFilter(5)" class="stage-btn bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold shrink-0">المرحلة 5</button>
+      <button onclick="setStageFilter(6)" class="stage-btn bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold shrink-0">المرحلة 6</button>
+    </div>
   </section>
 
   <!-- قائمة المحتوى -->
@@ -59,9 +75,24 @@
     </div>
 
     <div id="materials-list" class="space-y-3">
-      <p class="text-sm text-slate-400 text-center py-8">جاري جلب البيانات...</p>
+      <!-- Skeleton Loaders للتحميل -->
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 animate-pulse h-20"></div>
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 animate-pulse h-20"></div>
     </div>
   </main>
+
+  <!-- عارض الـ PDF / الفيديو الداخلي (In-App Viewer) -->
+  <div id="viewer-modal" class="fixed inset-0 bg-slate-950/95 z-50 hidden flex-col">
+    <div class="flex justify-between items-center p-3 bg-slate-900 border-b border-slate-800">
+      <h3 id="viewer-title" class="text-xs font-bold text-slate-200 truncate max-w-[70%]">عرض المحتوى</h3>
+      <button onclick="closeViewer()" class="bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold shadow">
+        إغلاق ✖
+      </button>
+    </div>
+    <div class="flex-1 w-full h-full bg-slate-900">
+      <iframe id="viewer-iframe" class="w-full h-full border-0" src=""></iframe>
+    </div>
+  </div>
 
   <script>
     // 1. تهيئة التليجرام
@@ -69,36 +100,37 @@
     tg.ready();
     tg.expand();
 
-    // 2. ربط بياناتك المباشرة
+    // 2. بيانات Supabase والأدمن
     const SUPABASE_URL = "https://iqcppnvolmzumdsdjgcl.supabase.co"; 
     const SUPABASE_KEY = "sb_publishable_3R0W8KSkQETjaTSL3XfHpw_UH4piv3i"; 
     const ADMIN_TELEGRAM_ID = 5550753912; 
 
-    // تهيئة عميل Supabase
     const { createClient } = supabase;
     const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let allMaterials = [];
+    let activeStage = 'all';
+    let isAdmin = false;
 
     // التحقق من هوية المستخدم
     const user = tg.initDataUnsafe?.user;
     if (user) {
       document.getElementById('user-name').innerText = `أهلاً دكتور ${user.first_name || ''}`;
       if (user.id === ADMIN_TELEGRAM_ID) {
+        isAdmin = true;
         document.getElementById('admin-btn').classList.remove('hidden');
       }
     } else {
-      // إظهار اللوحة للتجربة خارج تطبيق تيليجرام
+      isAdmin = true; // للتجربة خارج تلجرام
       document.getElementById('admin-btn').classList.remove('hidden');
     }
 
     function toggleAdminPanel() {
-      const panel = document.getElementById('admin-panel');
-      panel.classList.toggle('hidden');
+      document.getElementById('admin-panel').classList.toggle('hidden');
     }
 
     // جلب البيانات من Supabase
     async function fetchMaterials() {
-      const container = document.getElementById('materials-list');
-      
       try {
         const { data, error } = await _supabase
           .from('Miniapp')
@@ -107,30 +139,104 @@
 
         if (error) throw error;
 
-        document.getElementById('total-count').innerText = `${data.length} محاضرة`;
-
-        if (!data || data.length === 0) {
-          container.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">لا يوجد محتوى مضاف حالياً.</p>`;
-          return;
-        }
-
-        container.innerHTML = data.map(item => `
-          <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-slate-600 transition flex justify-between items-center gap-3">
-            <div class="space-y-1">
-              <span class="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-full">
-                المرحلة ${item.stage || 1} • ${item.subject || 'عام'}
-              </span>
-              <h3 class="font-bold text-sm text-slate-100">${item.title}</h3>
-              <p class="text-xs text-slate-400">👨‍⚕️ د. ${item.doctor_name || 'غير محدد'}</p>
-            </div>
-            <a href="${item.file_url}" target="_blank" class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg text-xs font-bold text-white shrink-0 shadow transition">
-              ${item.type === 'pdf' ? '📖 فتح PDF' : '🎥 مشاهدة'}
-            </a>
-          </div>
-        `).join('');
+        allMaterials = data || [];
+        filterMaterials();
       } catch (err) {
-        container.innerHTML = `<p class="text-red-400 text-sm text-center">حدث خطأ أثناء تحميل المحاضرات</p>`;
+        document.getElementById('materials-list').innerHTML = `<p class="text-red-400 text-sm text-center">حدث خطأ أثناء تحميل المحاضرات</p>`;
         console.error(err);
+      }
+    }
+
+    // تصفية المحاضرات بحسب البحث والمرحلة
+    function filterMaterials() {
+      const searchVal = document.getElementById('search-input').value.toLowerCase();
+      
+      const filtered = allMaterials.filter(item => {
+        const matchesSearch = (item.title || '').toLowerCase().includes(searchVal) ||
+                              (item.doctor_name || '').toLowerCase().includes(searchVal) ||
+                              (item.subject || '').toLowerCase().includes(searchVal);
+        const matchesStage = activeStage === 'all' || item.stage == activeStage;
+        return matchesSearch && matchesStage;
+      });
+
+      renderMaterials(filtered);
+    }
+
+    function setStageFilter(stage) {
+      activeStage = stage;
+      // تحديث شكل الأزرار
+      document.querySelectorAll('.stage-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-600', 'text-white');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+      });
+      event.target.classList.remove('bg-slate-800', 'text-slate-300');
+      event.target.classList.add('bg-blue-600', 'text-white');
+      filterMaterials();
+    }
+
+    // عرض القائمة
+    function renderMaterials(list) {
+      const container = document.getElementById('materials-list');
+      document.getElementById('total-count').innerText = `${list.length} محاضرة`;
+
+      if (list.length === 0) {
+        container.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">لا توجد نتائج مطابقة.</p>`;
+        return;
+      }
+
+      container.innerHTML = list.map(item => `
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-slate-600 transition flex justify-between items-center gap-3">
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-full">
+              المرحلة ${item.stage || 1} • ${item.subject || 'عام'}
+            </span>
+            <h3 class="font-bold text-sm text-slate-100">${item.title}</h3>
+            <p class="text-xs text-slate-400">👨‍⚕️ د. ${item.doctor_name || 'غير محدد'}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            ${isAdmin ? `<button onclick="deleteMaterial(${item.id})" class="text-red-400 hover:text-red-300 text-xs p-1">🗑️</button>` : ''}
+            <button onclick="openViewer('${item.file_url}', '${item.title}', '${item.type}')" class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg text-xs font-bold text-white shrink-0 shadow transition">
+              ${item.type === 'pdf' ? '📖 فتح PDF' : '🎥 مشاهدة'}
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // فتح عارض الـ PDF / الفيديو داخل التطبيق
+    function openViewer(url, title, type) {
+      const modal = document.getElementById('viewer-modal');
+      const iframe = document.getElementById('viewer-iframe');
+      document.getElementById('viewer-title').innerText = title;
+
+      // تحويل روابط الـ PDF لرابط يعرض داخل iframe بواسطة Google Docs Viewer لضمان عمله في كل الأجهزة
+      if (type === 'pdf' && !url.includes('drive.google.com')) {
+        iframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+      } else {
+        iframe.src = url;
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeViewer() {
+      const modal = document.getElementById('viewer-modal');
+      const iframe = document.getElementById('viewer-iframe');
+      iframe.src = '';
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // حذف محاضرة (للأدمن)
+    async function deleteMaterial(id) {
+      if (!confirm('هل أنت تأكد من حذف هذه المحاضرة؟')) return;
+      try {
+        const { error } = await _supabase.from('Miniapp').delete().eq('id', id);
+        if (error) throw error;
+        fetchMaterials();
+      } catch (err) {
+        alert('حدث خطأ أثناء الحذف: ' + err.message);
       }
     }
 
