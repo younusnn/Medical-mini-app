@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>المنصة الطبية - Mini App</title>
+  <!-- Tailwind CSS للتصميم -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Supabase JS Client v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 text-white font-sans p-4 min-h-screen pb-12">
+
+  <!-- الهيدر والترحيب -->
+  <header class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+    <div>
+      <h1 class="text-xl font-bold text-blue-400">🎓 المنصة الطبية الشاملة</h1>
+      <p id="user-name" class="text-xs text-slate-400">أهلاً بك يا دكتور</p>
+    </div>
+    <button id="admin-btn" class="hidden bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-xs font-bold shadow transition" onclick="toggleAdminPanel()">
+      ⚙️ لوحة الإدارة
+    </button>
+  </header>
+
+  <!-- لوحة الأدمن (تظهر للأدمن فقط) -->
+  <section id="admin-panel" class="hidden bg-slate-800 p-4 rounded-xl mb-6 border border-red-500/30 shadow-2xl">
+    <h2 class="text-sm font-bold text-red-400 mb-3">➕ رفع محاضرة جديدة</h2>
+    <form id="add-material-form" class="space-y-3">
+      <input type="text" id="title" placeholder="عنوان المحاضرة (مثلاً: Lecture 1 Anatomy)" required class="w-full p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+      
+      <div class="grid grid-cols-2 gap-2">
+        <input type="text" id="subject" placeholder="المادة (Anatomy, Pathology...)" required class="p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
+        <input type="number" id="stage" placeholder="المرحلة (1-6)" required class="p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <select id="type" class="p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
+          <option value="pdf">ملف PDF</option>
+          <option value="youtube">فيديو يوتيوب</option>
+        </select>
+        <input type="text" id="doctor_name" placeholder="اسم المحاضر" class="p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
+      </div>
+
+      <input type="text" id="file_url" placeholder="رابط الملف/اليوتيوب أو رابط القناة" required class="w-full p-2.5 bg-slate-700 rounded-lg text-sm text-white focus:outline-none">
+      
+      <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">
+        🚀 نشر المحاضرة في التطبيق
+      </button>
+    </form>
+  </section>
+
+  <!-- قائمة المحتوى -->
+  <main>
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-md font-bold text-slate-200">📚 المكتبة الطبية</h2>
+      <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full border border-slate-700" id="total-count">0 محاضرة</span>
+    </div>
+
+    <div id="materials-list" class="space-y-3">
+      <p class="text-sm text-slate-400 text-center py-8">جاري جلب البيانات...</p>
+    </div>
+  </main>
+
+  <script>
+    // 1. تهيئة التليجرام
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // 2. ربط بياناتك المباشرة
+    const SUPABASE_URL = "https://iqcppnvolmzumdsdjgcl.supabase.co"; 
+    const SUPABASE_KEY = "sb_publishable_3R0W8KSkQETjaTSL3XfHpw_UH4piv3i"; 
+    const ADMIN_TELEGRAM_ID = 5550753912; 
+
+    // تهيئة عميل Supabase
+    const { createClient } = supabase;
+    const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // التحقق من هوية المستخدم
+    const user = tg.initDataUnsafe?.user;
+    if (user) {
+      document.getElementById('user-name').innerText = `أهلاً دكتور ${user.first_name || ''}`;
+      if (user.id === ADMIN_TELEGRAM_ID) {
+        document.getElementById('admin-btn').classList.remove('hidden');
+      }
+    } else {
+      // إظهار اللوحة للتجربة خارج تطبيق تيليجرام
+      document.getElementById('admin-btn').classList.remove('hidden');
+    }
+
+    function toggleAdminPanel() {
+      const panel = document.getElementById('admin-panel');
+      panel.classList.toggle('hidden');
+    }
+
+    // جلب البيانات من Supabase
+    async function fetchMaterials() {
+      const container = document.getElementById('materials-list');
+      
+      try {
+        const { data, error } = await _supabase
+          .from('Miniapp')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        document.getElementById('total-count').innerText = `${data.length} محاضرة`;
+
+        if (!data || data.length === 0) {
+          container.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">لا يوجد محتوى مضاف حالياً.</p>`;
+          return;
+        }
+
+        container.innerHTML = data.map(item => `
+          <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-slate-600 transition flex justify-between items-center gap-3">
+            <div class="space-y-1">
+              <span class="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-full">
+                المرحلة ${item.stage || 1} • ${item.subject || 'عام'}
+              </span>
+              <h3 class="font-bold text-sm text-slate-100">${item.title}</h3>
+              <p class="text-xs text-slate-400">👨‍⚕️ د. ${item.doctor_name || 'غير محدد'}</p>
+            </div>
+            <a href="${item.file_url}" target="_blank" class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg text-xs font-bold text-white shrink-0 shadow transition">
+              ${item.type === 'pdf' ? '📖 فتح PDF' : '🎥 مشاهدة'}
+            </a>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<p class="text-red-400 text-sm text-center">حدث خطأ أثناء تحميل المحاضرات</p>`;
+        console.error(err);
+      }
+    }
+
+    // إضافة محاضرة جديدة
+    document.getElementById('add-material-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'جاري النشر...';
+
+      const title = document.getElementById('title').value;
+      const subject = document.getElementById('subject').value;
+      const stage = parseInt(document.getElementById('stage').value);
+      const type = document.getElementById('type').value;
+      const doctor_name = document.getElementById('doctor_name').value;
+      const file_url = document.getElementById('file_url').value;
+
+      try {
+        const { error } = await _supabase.from('Miniapp').insert([
+          { title, subject, stage, type, doctor_name, file_url }
+        ]);
+
+        if (error) throw error;
+
+        alert('تمت إضافة المحاضرة بنجاح! 🎉');
+        document.getElementById('add-material-form').reset();
+        toggleAdminPanel();
+        fetchMaterials();
+      } catch (err) {
+        alert('حدث خطأ أثناء الإضافة: ' + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = '🚀 نشر المحاضرة في التطبيق';
+      }
+    });
+
+    fetchMaterials();
+  </script>
+</body>
+</html>
