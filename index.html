@@ -263,7 +263,7 @@
       `).join('');
     }
 
-    // دالة الفتح المعدلة لتدعم File ID ومختلف أنواع الروابط
+    // دالة الفتح المعدلة لتعمل عبر Google Docs Viewer وخادم Vercel
     function openViewer(fileIdOrUrl, title, type) {
       if (!fileIdOrUrl) {
         alert("الرابط أو File ID غير متوفر!");
@@ -277,7 +277,7 @@
       // 1. إذا كان المدخل File ID (لا يبدأ بـ http)
       if (!fileIdOrUrl.startsWith('http://') && !fileIdOrUrl.startsWith('https://')) {
         const pdfProxyUrl = `${VERCEL_BACKEND_URL}?file_id=${encodeURIComponent(fileIdOrUrl)}`;
-        iframe.src = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfProxyUrl)}`;
+        iframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(pdfProxyUrl)}&embedded=true`;
       } 
       // 2. إذا كان رابط قناة أو منشور تلجرام
       else if (fileIdOrUrl.includes('t.me') || fileIdOrUrl.includes('telegram')) {
@@ -288,7 +288,7 @@
         }
         return;
       } 
-      // 3. إذا كان رابط خارجي مباشر (مثل Google Drive أو غيره)
+      // 3. أي رابط خارجي آخر
       else {
         if (type === 'pdf') {
           iframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(fileIdOrUrl)}&embedded=true`;
