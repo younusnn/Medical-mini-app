@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // السماح بطلبات CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
@@ -11,7 +10,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. طلب مسار الملف من تلجرام
     const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${file_id}`);
     const fileData = await fileRes.json();
 
@@ -22,8 +20,13 @@ export default async function handler(req, res) {
     const filePath = fileData.result.file_path;
     const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
 
-    // 2. إعادة توجيه القارئ إلى الرابط المباشر فوراً بدلاً من تحميله على السيرفر
-    return res.redirect(302, downloadUrl);
+    const pdfRes = await fetch(downloadUrl);
+    const pdfArrayBuffer = await pdfRes.arrayBuffer();
+    const buffer = Buffer.from(pdfArrayBuffer);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', buffer.length);
+    return res.status(200).send(buffer);
 
   } catch (error) {
     return res.status(500).json({ error: 'Server Error', details: error.message });
