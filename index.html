@@ -71,7 +71,7 @@
 
       <div class="grid grid-cols-2 gap-2">
         <input type="text" id="doctor_name" placeholder="اسم الدكتور / الشارح" class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none">
-        <input type="text" id="file_url" placeholder="رابط الملف المباشر أو Telegram File ID" required class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none">
+        <input type="text" id="file_url" placeholder="رابط الملف المباشر أو رابط منشور تلجرام" required class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none">
       </div>
       
       <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg">
@@ -149,9 +149,6 @@
     const SUPABASE_URL = "https://iqcppnvolmzumdsdjgcl.supabase.co"; 
     const SUPABASE_KEY = "sb_publishable_3R0W8KSkQETjaTSL3XfHpw_UH4piv3i"; 
     const ADMIN_TELEGRAM_ID = 5550753912; 
-
-    // ضع هنا توكن البوت الخاص بك لتوليد روابط التحميل المباشرة
-    const BOT_TOKEN = "7724213601:AAG3S1s2K6o3xO_EXAMPLE_TOKEN"; 
 
     const { createClient } = supabase;
     const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -267,57 +264,38 @@
           <div class="flex items-center gap-2">
             ${isAdmin ? `<button onclick="deleteMaterial(${item.id})" class="text-red-400 hover:text-red-300 text-xs p-1">🗑️</button>` : ''}
             
-            ${activeCategory === 'download' ? 
-              `<button onclick="openViewer('${item.file_url}', '${item.title}', '${item.type}')" class="bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white shadow transition">
-                📥 فتح / تنزيل
-              </button>` : 
-              `<button onclick="openViewer('${item.file_url}', '${item.title}', '${item.type}')" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white shadow transition">
-                ${item.type === 'pdf' ? '📖 عرض' : '🎥 مشاهدة'}
-              </button>`
-            }
+            <button onclick="openViewer('${item.file_url}', '${item.title}', '${item.type}')" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white shadow transition">
+              ${item.type === 'pdf' ? '📖 عرض' : '🎥 مشاهدة'}
+            </button>
           </div>
         </div>
       `).join('');
     }
 
-    // الدالة المعدلة لعرض الملف بشكل مباشر بدون ظهور أكواد HTML
-    async function openViewer(urlOrFileId, title, type) {
+    // دالة الفتح المستقرة والمباشرة
+    function openViewer(url, title, type) {
+      // إذا كان رابط تلجرام (سواء منشور أو قناة أو ملف)
+      if (url.includes('t.me') || url.includes('telegram')) {
+        if (tg.openTelegramLink) {
+          tg.openTelegramLink(url);
+        } else {
+          window.open(url, '_blank');
+        }
+        return;
+      }
+
+      // إذا كان رابط ملف عادي أو خارجي (Google Drive / Direct PDF)
       const modal = document.getElementById('viewer-modal');
       const iframe = document.getElementById('viewer-iframe');
-      document.getElementById('viewer-title').innerText = title + " (جاري التحميل...)";
+      document.getElementById('viewer-title').innerText = title;
 
       modal.classList.remove('hidden');
       modal.classList.add('flex');
-      iframe.src = '';
-
-      let targetUrl = urlOrFileId;
-
-      // إذا كان المدخل File ID خاص بتلجرام
-      if (!urlOrFileId.startsWith('http://') && !urlOrFileId.startsWith('https://')) {
-        try {
-          const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${urlOrFileId}`);
-          const data = await res.json();
-          if (data.ok && data.result.file_path) {
-            targetUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`;
-          } else {
-            alert("لم نتمكن من الوصول للملف، يرجى التأكد من التوكن أو File ID");
-            closeViewer();
-            return;
-          }
-        } catch (err) {
-          alert("خطأ في الاتصال بتلجرام");
-          closeViewer();
-          return;
-        }
-      }
-
-      document.getElementById('viewer-title').innerText = title;
 
       if (type === 'pdf') {
-        // فتح مباشر عبر العارض المدمج
-        iframe.src = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(targetUrl)}`;
+        iframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
       } else {
-        iframe.src = targetUrl;
+        iframe.src = url;
       }
     }
 
