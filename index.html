@@ -71,7 +71,7 @@
 
       <div class="grid grid-cols-2 gap-2">
         <input type="text" id="doctor_name" placeholder="اسم الدكتور / الشارح" class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none">
-        <input type="text" id="file_url" placeholder="رابط الملف أو Telegram File ID" required class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none">
+        <input type="text" id="file_url" placeholder="رابط الملف المباشر أو Telegram File ID" required class="p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none">
       </div>
       
       <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg">
@@ -150,6 +150,9 @@
     const SUPABASE_KEY = "sb_publishable_3R0W8KSkQETjaTSL3XfHpw_UH4piv3i"; 
     const ADMIN_TELEGRAM_ID = 5550753912; 
 
+    // ضع هنا توكن البوت الخاص بك لتوليد روابط التحميل المباشرة
+    const BOT_TOKEN = "7724213601:AAG3S1s2K6o3xO_EXAMPLE_TOKEN"; 
+
     const { createClient } = supabase;
     const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -161,7 +164,7 @@
     // التحقق من هوية المستخدم
     const user = tg.initDataUnsafe?.user;
     if (user) {
-      document.getElementById('user-name').innerText = `أهلاً دكتور ${user.first_name || ''}`;
+      document.getElementById('user-name').innerText = `أهلاً بك يا دكتور ${user.first_name || ''}`;
       if (user.id === ADMIN_TELEGRAM_ID) {
         isAdmin = true;
         document.getElementById('admin-btn').classList.remove('hidden');
@@ -229,7 +232,6 @@
         return matchesStage && matchesCat && matchesSearch;
       });
 
-      // تحديث العنوان
       const catNames = {
         'doctors': '👨‍⚕️ محاضرات الدكاترة',
         'younus': '🎓 محاضرات يونس',
@@ -278,7 +280,7 @@
       `).join('');
     }
 
-    // الدالة المحدثة للاتصال المباشر ببرمجة تلجرام المفتوحة
+    // الدالة المعدلة لعرض الملف بشكل مباشر بدون ظهور أكواد HTML
     async function openViewer(urlOrFileId, title, type) {
       const modal = document.getElementById('viewer-modal');
       const iframe = document.getElementById('viewer-iframe');
@@ -290,28 +292,30 @@
 
       let targetUrl = urlOrFileId;
 
-      // إذا كان المدخل عبارة عن File ID وليس رابط عادي
+      // إذا كان المدخل File ID خاص بتلجرام
       if (!urlOrFileId.startsWith('http://') && !urlOrFileId.startsWith('https://')) {
         try {
-          // جلب مسار الملف من برمجية تلجرام المباشرة عبر بروتوكول فتح الحزمه
-          const res = await fetch(`https://api.telegram.org/bot7123456789:AAHg.../getFile?file_id=${urlOrFileId}`);
+          const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${urlOrFileId}`);
           const data = await res.json();
           if (data.ok && data.result.file_path) {
-            targetUrl = `https://api.telegram.org/file/bot7123456789:AAHg.../${data.result.file_path}`;
+            targetUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`;
           } else {
-            // التحويل للرابط العام لتلجرام تلقائياً
-            targetUrl = `https://t.me/c/${urlOrFileId}`;
+            alert("لم نتمكن من الوصول للملف، يرجى التأكد من التوكن أو File ID");
+            closeViewer();
+            return;
           }
         } catch (err) {
-          targetUrl = urlOrFileId;
+          alert("خطأ في الاتصال بتلجرام");
+          closeViewer();
+          return;
         }
       }
 
       document.getElementById('viewer-title').innerText = title;
 
-      // عرض الـ PDF أو الفيديو
       if (type === 'pdf') {
-        iframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(targetUrl)}&embedded=true`;
+        // فتح مباشر عبر العارض المدمج
+        iframe.src = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(targetUrl)}`;
       } else {
         iframe.src = targetUrl;
       }
