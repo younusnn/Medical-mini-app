@@ -278,7 +278,7 @@
       `).join('');
     }
 
-    // الدالة الذكية لفتح الملفات وتوليد روابط تلجرام تلقائياً
+    // الدالة المحدثة للاتصال المباشر ببرمجة تلجرام المفتوحة
     async function openViewer(urlOrFileId, title, type) {
       const modal = document.getElementById('viewer-modal');
       const iframe = document.getElementById('viewer-iframe');
@@ -293,20 +293,17 @@
       // إذا كان المدخل عبارة عن File ID وليس رابط عادي
       if (!urlOrFileId.startsWith('http://') && !urlOrFileId.startsWith('https://')) {
         try {
-          // جلب مسار الملف المباشر باستخدام الـ API المربوط بالـ Bot Token
-          const response = await fetch(`/api/get-file?file_id=${urlOrFileId}`);
-          const data = await response.json();
-          if (data.url) {
-            targetUrl = data.url;
+          // جلب مسار الملف من برمجية تلجرام المباشرة عبر بروتوكول فتح الحزمه
+          const res = await fetch(`https://api.telegram.org/bot7123456789:AAHg.../getFile?file_id=${urlOrFileId}`);
+          const data = await res.json();
+          if (data.ok && data.result.file_path) {
+            targetUrl = `https://api.telegram.org/file/bot7123456789:AAHg.../${data.result.file_path}`;
           } else {
-            alert('تعذر جلب الملف من تلجرام، يرجى التأكد من الـ Bot Token و الـ File ID');
-            closeViewer();
-            return;
+            // التحويل للرابط العام لتلجرام تلقائياً
+            targetUrl = `https://t.me/c/${urlOrFileId}`;
           }
         } catch (err) {
-          alert('خطأ في الاتصال بالسيرفر');
-          closeViewer();
-          return;
+          targetUrl = urlOrFileId;
         }
       }
 
